@@ -11,7 +11,7 @@ import * as NavigationBar from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
 import { DeviceEventEmitter } from 'react-native';
-import { Platform, View, I18nManager } from 'react-native';
+import { Platform, View, I18nManager, Text } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 // import * as Updates from 'expo-updates'; 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,6 +28,7 @@ import { io } from 'socket.io-client/dist/socket.io.js';
 import * as Location from 'expo-location';
 import { trackingApi } from '../services/api';
 import { pruneIncomingOffers, putIncomingOffer } from '../services/callCache';
+import { Audio } from 'expo-av';
 
 function AppContent() {
     const segments = useSegments();
@@ -40,10 +41,27 @@ function AppContent() {
     const unreadMessagesCount = useSelector((state: RootState) => state.ui.unreadMessagesCount);
 
     const unreadMessagesCountRef = useRef(0);
+    const sosSoundRef = useRef<Audio.Sound | null>(null);
+    const lastSosEnRouteAtRef = useRef<number>(0);
+    const [sosEnRouteVisible, setSosEnRouteVisible] = useState(false);
 
     useEffect(() => {
         unreadMessagesCountRef.current = Number(unreadMessagesCount) || 0;
     }, [unreadMessagesCount]);
+
+    useEffect(() => {
+        return () => {
+            try {
+                if (sosSoundRef.current) {
+                    sosSoundRef.current.stopAsync().catch(() => {});
+                    sosSoundRef.current.unloadAsync().catch(() => {});
+                    sosSoundRef.current = null;
+                }
+            } catch (e) {
+                // ignore
+            }
+        };
+    }, []);
 
     useEffect(() => {
         // Initialize notifications
@@ -111,16 +129,71 @@ function AppContent() {
 
                 socket.on('new_notification', (payload: any) => {
                     console.log('[NotificationsSocket] Received:', payload);
-                    presentLocalMessageNotification({
-                        title: payload.title,
-                        body: payload.body,
-                        data: payload.data
-                    });
+
+                    const pType = String(payload?.data?.type || payload?.type || '').toLowerCase();
+                    if (pType === 'sos_status') {
+                        const status = String(payload?.data?.status || '').toLowerCase();
+                        const targetPilgrimId = String(payload?.data?.pilgrimUserId || '').trim();
+                        const myId = String(user?.id || '').trim();
+
+                        if (status === 'in_progress' && targetPilgrimId && myId && targetPilgrimId === myId) {
+                            const now = Date.now();
+                            if (now - (lastSosEnRouteAtRef.current || 0) > 15000) {
+                                lastSosEnRouteAtRef.current = now;
+
+                                try {
+                                    setSosEnRouteVisible(true);
+                                    setTimeout(() => setSosEnRouteVisible(false), 8000);
+                                } catch (e) {
+                                    // ignore
+                                }
+
+                                (async () => {
+                                    try {
+                                        if (sosSoundRef.current) {
+                                            await sosSoundRef.current.stopAsync().catch(() => {});
+                                            await sosSoundRef.current.unloadAsync().catch(() => {});
+                                            sosSoundRef.current = null;
+                                        }
+                                        await Audio.setAudioModeAsync({
+                                            playsInSilentModeIOS: true,
+                                            staysActiveInBackground: false,
+                                            shouldDuckAndroid: true,
+                                            playThroughEarpieceAndroid: false,
+                                        });
+                                        const { sound } = await Audio.Sound.createAsync(
+                                            require('../assets/images/sonne.mp3'),
+                                            { shouldPlay: true, isLooping: false, volume: 1.0 },
+                                        );
+                                        sosSoundRef.current = sound;
+                                        setTimeout(() => {
+                                            try {
+                                                if (sosSoundRef.current) {
+                                                    sosSoundRef.current.unloadAsync().catch(() => {});
+                                                    sosSoundRef.current = null;
+                                                }
+                                            } catch (e) {
+                                                // ignore
+                                            }
+                                        }, 4000);
+                                    } catch (e) {
+                                        // ignore
+                                    }
+                                })();
+                            }
+                        }
+                    } else {
+                        presentLocalMessageNotification({
+                            title: payload.title,
+                            body: payload.body,
+                            data: payload.data
+                        });
+                    }
 
                     // Let screens refresh instantly (e.g. accompagnant alert center)
                     try {
                         DeviceEventEmitter.emit('app:new_notification', payload);
-                    } catch {}
+                    } catch (e) {}
                 });
 
                 socket.on('disconnect', () => {
@@ -447,6 +520,35 @@ function AppContent() {
         <View style={{ flex: 1, backgroundColor }}>
             <StatusBar style={isDarkMode ? "light" : "dark"} translucent={true} backgroundColor="transparent" />
             <SafeAreaView style={{ flex: 1 }} edges={safeEdges}>
+                {sosEnRouteVisible ? (
+                    <View
+                        style={{
+                            position: 'absolute',
+                            top: 12,
+                            left: 12,
+                            right: 12,
+                            zIndex: 9999,
+                            borderRadius: 14,
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            backgroundColor: isDarkMode ? 'rgba(17, 24, 39, 0.92)' : 'rgba(255, 255, 255, 0.98)',
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                        }}
+                    >
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            <MaterialCommunityIcons name="navigation" size={18} color={isDarkMode ? '#FB923C' : '#F97316'} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontWeight: '800', color: isDarkMode ? '#fff' : '#111827' }}>
+                                    Le guide est en route
+                                </Text>
+                                <Text style={{ marginTop: 2, color: isDarkMode ? '#D1D5DB' : '#374151', fontWeight: '600' }}>
+                                    Reste stable dans votre position
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+                ) : null}
                 <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="index" />
                     <Stack.Screen name="(auth)" />

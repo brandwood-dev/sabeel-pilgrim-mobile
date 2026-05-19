@@ -169,8 +169,8 @@ export function GuideList({
             params: {
                 guideId: guide.id,
                 guideName: `${guide.firstName} ${guide.lastName}`,
-                guideRating: (guide.rating || 5.0).toString(),
-                guideReviews: (guide.reviews || 0).toString(),
+                guideRating: (Number(guide.rating || 0)).toFixed(1),
+                guideReviews: (Number(guide.reviews || 0)).toString(),
                 guideExperience: (guide.experience || 0).toString(),
                 guidePrice: (guide.pricePerDay || 0).toString(),
                 guideLanguages: (guide.languages || []).join(','),
@@ -262,7 +262,7 @@ export function GuideList({
                             )}
                             <View style={styles.profileRatingBadge}>
                                 <Ionicons name="star" size={10} color="#FFB01F" />
-                                <Text style={styles.profileRatingText}>{item.rating || 5.0}</Text>
+                                <Text style={styles.profileRatingText}>{Number(item.rating || 0).toFixed(1)}</Text>
                             </View>
                         </View>
 

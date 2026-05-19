@@ -1,13 +1,15 @@
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { reservationApi } from '@/services/api';
+import { useTrans } from '@/hooks/useTrans';
+import { authApi, paymentsApi, reservationApi } from '@/services/api';
 import { RootState } from '@/store/store';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image } from 'expo-image';
 import {
     Alert,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -69,14 +71,16 @@ const sanitizeOptionalMediaParam = (value: string) => {
     return '';
 };
 
-const formatMoney = (value: number) => `${Number(value || 0).toFixed(2)} DT`;
+const formatMoney = (value: number) => `${Number(value || 0).toFixed(2)} TND`;
 
 const buildPaymentLabel = (mode: 'online' | 'onsite') =>
     mode === 'online' ? 'Paiement en ligne (Acompte)' : 'Paiement sur place (Acompte)';
 
 export default function ReservationPackScreen() {
+    const { t } = useTrans();
     const colors = useThemeColors();
     const isDarkMode = useSelector((state: RootState) => state.theme.isDarkMode);
+    const user = useSelector((state: RootState) => state.auth.user);
     const router = useRouter();
     const params = useLocalSearchParams();
     const id = getParamValue(params.id);
@@ -87,16 +91,48 @@ export default function ReservationPackScreen() {
     const unitPrice = Number(getParamValue(params.price) || 0);
 
     const [form, setForm] = useState({
-        fullName: '',
-        email: '',
-        phone: '',
-        age: '',
+        fullName: user?.fullName || user?.name || user?.username || '',
+        email: user?.email || '',
+        phone: user?.phone || '',
+        age: user?.age ? String(user.age) : '',
         passengers: '1',
         hasDisease: 'no',
         medications: '',
         paymentMode: 'online' as 'online' | 'onsite',
         specialRequests: '',
     });
+
+    useEffect(() => {
+        const fetchRealProfile = async () => {
+            try {
+                const response = await authApi.getProfile();
+                const profile = response.data;
+                if (profile) {
+                    setForm(prev => ({
+                        ...prev,
+                        fullName: prev.fullName || profile.fullName || ((profile.firstName || '') + ' ' + (profile.lastName || '')).trim() || profile.name || profile.username || '',
+                        email: prev.email || profile.email || '',
+                        phone: prev.phone || profile.phoneNumber || profile.phone || '',
+                        age: prev.age || (profile.age ? String(profile.age) : ''),
+                    }));
+                }
+            } catch (error) {
+                console.error('[ReservationPack] Failed to fetch real profile', error);
+                // Fallback to Redux store
+                if (user) {
+                    setForm(prev => ({
+                        ...prev,
+                        fullName: prev.fullName || user.fullName || user.name || user.username || '',
+                        email: prev.email || user.email || '',
+                        phone: prev.phone || user.phone || '',
+                        age: prev.age || (user.age ? String(user.age) : ''),
+                    }));
+                }
+            }
+        };
+
+        fetchRealProfile();
+    }, [user]);
 
     const pilgrimCount = Math.max(1, Number(form.passengers) || 1);
     const totalPrice = useMemo(() => unitPrice * pilgrimCount, [unitPrice, pilgrimCount]);
@@ -107,6 +143,75 @@ export default function ReservationPackScreen() {
     const hasDisease = form.hasDisease === 'yes';
     const cardShadowColor = isDarkMode ? '#000000' : colors.primary;
     const [submitting, setSubmitting] = useState(false);
+    const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+    const [alreadyReservedModalVisible, setAlreadyReservedModalVisible] = useState(false);
+    const [successModalVisible, setSuccessModalVisible] = useState(false);
+    const [successParams, setSuccessParams] = useState<any>(null);
+    const [activeAlertModalVisible, setActiveAlertModalVisible] = useState(false);
+    const [validationModalVisible, setValidationModalVisible] = useState(false);
+    const [existingReservations, setExistingReservations] = useState<any[]>([]);
+    const [reservationsLoading, setReservationsLoading] = useState(true);
+
+    // Check for existing active reservations on mount
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const res = await reservationApi.getMyReservations();
+                const items = Array.isArray(res?.data) ? res.data : [];
+                if (mounted) setExistingReservations(items);
+            } catch (e) {
+                console.warn('[ReservationPack] failed to load existing reservations', e);
+            } finally {
+                if (mounted) setReservationsLoading(false);
+            }
+        })();
+        return () => { mounted = false; };
+    }, []);
+
+    const hasActiveReservation = useMemo(() => {
+        return existingReservations.some(
+            (r: any) => String(r.kind || '').toLowerCase() === 'pack' && (r.status === 'pending' || r.status === 'accepted')
+        );
+    }, [existingReservations]);
+
+    const alreadyReservedThisPack = useMemo(() => {
+        return existingReservations.find(
+            (r: any) => String(r.packId || '') === String(id) && (r.status === 'pending' || r.status === 'accepted')
+        );
+    }, [existingReservations, id]);
+
+    useEffect(() => {
+        if (!reservationsLoading && alreadyReservedThisPack) {
+            setAlreadyReservedModalVisible(true);
+        }
+    }, [reservationsLoading, alreadyReservedThisPack]);
+
+    const handleGoToChat = () => {
+        setAlreadyReservedModalVisible(false);
+        if (alreadyReservedThisPack) {
+            const chatParams = {
+                contactName: alreadyReservedThisPack.agencyName || agencyName,
+                conversationId: alreadyReservedThisPack.conversationId,
+                reservationId: alreadyReservedThisPack.id,
+                fromReservation: 'true',
+            };
+            router.replace({
+                pathname: '/(umrah_agence)/(screens)/(chat)/chat_pelerin' as any,
+                params: chatParams
+            });
+        }
+    };
+
+    const handleSuccessOk = () => {
+        setSuccessModalVisible(false);
+        if (successParams) {
+            router.replace({
+                pathname: '/(umrah_agence)/(screens)/(chat)/chat_pelerin' as any,
+                params: successParams
+            });
+        }
+    };
 
     console.log('[ReservationPack] render', {
         id,
@@ -122,6 +227,27 @@ export default function ReservationPackScreen() {
     const handleInputChange = (field: string, value: string) => {
         setForm({ ...form, [field]: value });
     };
+
+    const buildPayload = () => ({
+        packId: id,
+        reservationDate: date,
+        userName: form.fullName,
+        userEmail: form.email,
+        userPhone: form.phone,
+        userAge: form.age,
+        pilgrimCount: Number(pilgrimCount),
+        hasDisease: hasDisease ? 'true' : 'false',
+        medications: form.medications,
+        specialRequests: form.specialRequests,
+        paymentType,
+        paymentMode: form.paymentMode,
+        unitPrice: unitPrice.toFixed(2),
+        totalPrice: totalPrice.toFixed(2),
+        advanceAmount: advanceAmount.toFixed(2),
+        remainingAmount: remainingAmount.toFixed(2),
+        appCommissionAmount: appCommissionAmount.toFixed(2),
+        appCommissionRate: String(APP_COMMISSION_RATE * 100),
+    });
 
     const handleSubmit = async () => {
         console.log('[ReservationPack] submit pressed', {
@@ -140,64 +266,134 @@ export default function ReservationPackScreen() {
                 phone: form.phone,
                 age: form.age,
             });
-            alert('Veuillez remplir le nom, le téléphone et l\'âge.');
+            setValidationModalVisible(true);
             return;
         }
 
+        if (alreadyReservedThisPack) {
+            setAlreadyReservedModalVisible(true);
+            return;
+        }
+
+        if (hasActiveReservation) {
+            setActiveAlertModalVisible(true);
+            return;
+        }
+
+        if (form.paymentMode === 'online') {
+            setConfirmModalVisible(true);
+            return;
+        }
+
+        // Onsite: create reservation then go straight to chat
+        await createReservationAndNavigate();
+    };
+
+    const createReservationAndNavigate = async () => {
         try {
             setSubmitting(true);
-
-            const payload = {
-                packId: id,
-                agencyId,
-                reservationDate: date,
-                userName: form.fullName,
-                userEmail: form.email,
-                userPhone: form.phone,
-                userAge: form.age,
-                pilgrimCount: pilgrimCount,
-                hasDisease: hasDisease ? 'true' : 'false',
-                medications: form.medications,
-                specialRequests: form.specialRequests,
-                paymentType,
-                paymentMode: form.paymentMode,
-                unitPrice: unitPrice.toFixed(2),
-                totalPrice: totalPrice.toFixed(2),
-                advanceAmount: advanceAmount.toFixed(2),
-                remainingAmount: remainingAmount.toFixed(2),
-                appCommissionAmount: appCommissionAmount.toFixed(2),
-                appCommissionRate: String(APP_COMMISSION_RATE * 100),
-            };
-
+            const payload = buildPayload();
             console.log('[ReservationPack] createReservation payload', payload);
 
             const response = await reservationApi.createReservation(payload);
-
             const reservation = response.data?.reservation;
             const conversation = response.data?.conversation;
-            const chatParams = {
+
+            setSuccessParams({
                 contactName: reservation?.agencyName || agencyName,
                 conversationId: conversation?.id,
                 reservationId: reservation?.id,
                 fromReservation: 'true',
-                // On ne passe aucune donnée de formulaire ou d'image ici pour éviter les crashs
-            };
-
-            setSubmitting(false);
-
-            router.replace({
-                pathname: '/(umrah_agence)/(screens)/(chat)/chat_pelerin' as any,
-                params: chatParams
             });
+            setSuccessModalVisible(true);
         } catch (error: any) {
+            const status = error?.response?.status;
+            const responseData = error?.response?.data;
+            const message = error?.message;
+            const requestUrl = error?.config?.url;
+            const requestMethod = error?.config?.method;
             console.error('[ReservationPack] createReservation failed', {
-                message: error?.message,
-                responseData: error?.response?.data,
+                status,
+                requestUrl,
+                requestMethod,
+                responseData,
+                message,
+                code: error?.code,
                 stack: error?.stack,
             });
             Alert.alert(
-                'Réservation indisponible',
-                error?.response?.data?.message || error?.message || 'Impossible d\'envoyer la réservation pour le moment.'
+                t('Réservation indisponible'),
+                responseData?.message || message || t('Impossible d\'envoyer la réservation pour le moment.')
+            );
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleConfirmAndBook = async () => {
+        setConfirmModalVisible(false);
+        try {
+            setSubmitting(true);
+            const payload = buildPayload();
+            console.log('[ReservationPack] createReservation payload (online)', payload);
+
+            const response = await reservationApi.createReservation(payload);
+            const reservation = response.data?.reservation;
+            const conversation = response.data?.conversation;
+
+            if (reservation?.id) {
+                try {
+                    const advanceCents = Math.floor(advanceAmount * 100);
+                    await paymentsApi.walletPay({
+                        totalAmountCents: advanceCents,
+                        recipientType: 'AGENCY',
+                        recipientId: agencyId,
+                        referenceType: 'reservation',
+                        referenceId: String(reservation.id),
+                        idempotencyKey: `res-${reservation.id}-${Date.now()}`,
+                    });
+                } catch (payError: any) {
+                    setSubmitting(false);
+                    const msg = payError?.response?.data?.message || payError?.message || '';
+                    if (msg.toLowerCase().includes('insufficient')) {
+                        Alert.alert(
+                            t('Solde insuffisant'),
+                            t('Votre solde wallet est insuffisant pour cet acompte. Veuillez recharger votre portefeuille.'),
+                            [
+                                { text: t('Annuler'), style: 'cancel' },
+                                {
+                                    text: t('Recharger'),
+                                    onPress: () => router.push('/(umrah_agence)/(screens)/(carte)/recharge' as any),
+                                },
+                            ]
+                        );
+                    } else {
+                        Alert.alert(t('Paiement refusé'), msg || t('Impossible de payer cet acompte depuis le wallet.'));
+                    }
+                    return;
+                }
+            }
+
+            setSuccessParams({
+                contactName: reservation?.agencyName || agencyName,
+                conversationId: conversation?.id,
+                reservationId: reservation?.id,
+                fromReservation: 'true',
+            });
+            setSuccessModalVisible(true);
+        } catch (error: any) {
+            const status = error?.response?.status;
+            const responseData = error?.response?.data;
+            const message = error?.message;
+            console.error('[ReservationPack] createReservation failed (online)', {
+                status,
+                responseData,
+                message,
+                code: error?.code,
+            });
+            Alert.alert(
+                t('Réservation indisponible'),
+                responseData?.message || message || t('Impossible d\'envoyer la réservation pour le moment.')
             );
         } finally {
             setSubmitting(false);
@@ -210,7 +406,7 @@ export default function ReservationPackScreen() {
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: colors.text }]}>Confirmation de Réservation</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>{t('Confirmation de Réservation')}</Text>
                 <View style={{ width: 32 }} />
             </View>
 
@@ -230,10 +426,10 @@ export default function ReservationPackScreen() {
                         ]}>
                             <View style={styles.heroBadge}>
                                 <Ionicons name="sparkles-outline" size={14} color={colors.primary} />
-                                <Text style={[styles.heroBadgeText, { color: colors.primary }]}>Réservation guidée</Text>
+                                <Text style={[styles.heroBadgeText, { color: colors.primary }]}>{t('Réservation guidée')}</Text>
                             </View>
                             <Text style={[styles.summaryTitle, { color: colors.text }]}>{title}</Text>
-                            <Text style={[styles.heroDescription, { color: colors.textSecondary }]}>Complétez les étapes ci-dessous pour envoyer un dossier clair à l'agence et recevoir une réponse plus rapide.</Text>
+                            <Text style={[styles.heroDescription, { color: colors.textSecondary }]}>{t('Complétez les étapes ci-dessous pour envoyer un dossier clair à l\'agence et recevoir une réponse plus rapide.')}</Text>
                             <View style={[styles.divider, { backgroundColor: colors.divider }]} />
                             <View style={styles.heroMetaRow}>
                                 <View style={styles.heroMetaItem}>
@@ -506,6 +702,261 @@ export default function ReservationPackScreen() {
                     </View>
                 </View>
             </KeyboardAvoidingView>
+
+            {/* Payment Confirmation Modal */}
+            <Modal
+                visible={confirmModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setConfirmModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
+                        <TouchableOpacity
+                            style={styles.modalCloseBtn}
+                            onPress={() => setConfirmModalVisible(false)}
+                        >
+                            <Ionicons name="close" size={22} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <View style={styles.modalIconWrap}>
+                            <View style={[styles.modalIconCircle, { backgroundColor: `${colors.primary}15` }]}>
+                                <Ionicons name="shield-checkmark" size={28} color={colors.primary} />
+                            </View>
+                        </View>
+
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>
+                            {t('Confirmation de paiement')}
+                        </Text>
+                        <Text style={[styles.modalSub, { color: colors.textSecondary }]}>
+                            {t('Votre paiement est sécurisé et traité en toute confidentialité.')}
+                        </Text>
+
+                        <View style={styles.modalFeatures}>
+                            <View style={styles.modalFeatureRow}>
+                                <View style={[styles.modalFeatureIcon, { backgroundColor: `${colors.primary}12` }]}>
+                                    <Ionicons name="wallet-outline" size={18} color={colors.primary} />
+                                </View>
+                                <View style={styles.modalFeatureText}>
+                                    <Text style={[styles.modalFeatureTitle, { color: colors.text }]}>{t('Déduction wallet sécurisée')}</Text>
+                                    <Text style={[styles.modalFeatureDesc, { color: colors.textSecondary }]}>{t('Le montant payable sera prélevé en toute sécurité depuis votre wallet.')}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.modalFeatureRow}>
+                                <View style={[styles.modalFeatureIcon, { backgroundColor: `${colors.primary}12` }]}>
+                                    <Ionicons name="lock-closed-outline" size={18} color={colors.primary} />
+                                </View>
+                                <View style={styles.modalFeatureText}>
+                                    <Text style={[styles.modalFeatureTitle, { color: colors.text }]}>{t('Protection escrow')}</Text>
+                                    <Text style={[styles.modalFeatureDesc, { color: colors.textSecondary }]}>{t('Vos fonds sont conservés en sécurité et libérés uniquement après la livraison du service.')}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.modalFeatureRow}>
+                                <View style={[styles.modalFeatureIcon, { backgroundColor: `${colors.primary}12` }]}>
+                                    <Ionicons name="refresh-circle-outline" size={18} color={colors.primary} />
+                                </View>
+                                <View style={styles.modalFeatureText}>
+                                    <Text style={[styles.modalFeatureTitle, { color: colors.text }]}>{t('Garantie de remboursement')}</Text>
+                                    <Text style={[styles.modalFeatureDesc, { color: colors.textSecondary }]}>{t('En cas de problème, vous pouvez demander un remboursement complet selon notre politique.')}</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.modalCta, { backgroundColor: colors.primary }]}
+                            onPress={handleConfirmAndBook}
+                            disabled={submitting}
+                            activeOpacity={0.85}
+                        >
+                            <Text style={styles.modalCtaText}>
+                                {submitting ? t('Traitement...') : t('Confirmer et réserver')}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Already Reserved Modal */}
+            <Modal
+                visible={alreadyReservedModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setAlreadyReservedModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
+                        <TouchableOpacity
+                            style={styles.modalCloseBtn}
+                            onPress={() => setAlreadyReservedModalVisible(false)}
+                        >
+                            <Ionicons name="close" size={22} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <View style={styles.modalIconWrap}>
+                            <View style={[styles.modalIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+                                <Ionicons name="alert-circle" size={28} color="#EF4444" />
+                            </View>
+                        </View>
+
+                        <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center', marginTop: 12 }]}>
+                            {t('Ce pack est déjà réservé')}
+                        </Text>
+                        <Text style={[styles.modalSub, { color: colors.textSecondary, textAlign: 'center', marginTop: 8, marginHorizontal: 20 }]}>
+                            {t('Vous avez déjà une demande de réservation active pour ce pack d\'Umrah. Vous pouvez accéder à la discussion avec l\'agence pour suivre votre demande.')}
+                        </Text>
+
+                        <View style={[styles.infoNotice, { backgroundColor: colors.background, borderColor: colors.divider, marginTop: 20, width: '100%' }]}>
+                            <Ionicons name="business-outline" size={16} color={colors.primary} />
+                            <Text style={[styles.infoNoticeText, { color: colors.textSecondary, fontSize: 13 }]}>
+                                {agencyName} — {title}
+                            </Text>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 24, width: '100%' }}>
+                            <TouchableOpacity
+                                style={[styles.modalCta, { backgroundColor: colors.border, flex: 1 }]}
+                                onPress={() => setAlreadyReservedModalVisible(false)}
+                            >
+                                <Text style={[styles.modalCtaText, { color: colors.text }]}>
+                                    {t('Retour')}
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.modalCta, { backgroundColor: colors.primary, flex: 1.5 }]}
+                                onPress={handleGoToChat}
+                            >
+                                <Text style={styles.modalCtaText}>
+                                    {t('Voir le chat')}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Success Modal */}
+            <Modal
+                visible={successModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={handleSuccessOk}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
+                        <View style={styles.modalIconWrap}>
+                            <View style={[styles.modalIconCircle, { backgroundColor: 'rgba(58, 125, 68, 0.1)' }]}>
+                                <Ionicons name="checkmark-circle" size={32} color={colors.primary} />
+                            </View>
+                        </View>
+
+                        <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center', marginTop: 12 }]}>
+                            {t('Réservation réussie !')}
+                        </Text>
+                        <Text style={[styles.modalSub, { color: colors.textSecondary, textAlign: 'center', marginTop: 8, marginHorizontal: 20 }]}>
+                            {t('Votre demande de réservation a été transmise avec succès à l\'agence.')}
+                        </Text>
+
+                        <View style={[styles.infoNotice, { backgroundColor: colors.background, borderColor: colors.divider, marginTop: 20, width: '100%' }]}>
+                            <Ionicons name="business-outline" size={16} color={colors.primary} />
+                            <Text style={[styles.infoNoticeText, { color: colors.textSecondary, fontSize: 13 }]}>
+                                {agencyName} — {title}
+                            </Text>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.modalCta, { backgroundColor: colors.primary, marginTop: 24, width: '100%' }]}
+                            onPress={handleSuccessOk}
+                        >
+                            <Text style={styles.modalCtaText}>
+                                {t('OK')}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Active Reservation Alert Modal */}
+            <Modal
+                visible={activeAlertModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setActiveAlertModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
+                        <TouchableOpacity
+                            style={styles.modalCloseBtn}
+                            onPress={() => setActiveAlertModalVisible(false)}
+                        >
+                            <Ionicons name="close" size={22} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <View style={styles.modalIconWrap}>
+                            <View style={[styles.modalIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.1)' }]}>
+                                <Ionicons name="warning" size={28} color="#F59E0B" />
+                            </View>
+                        </View>
+
+                        <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center', marginTop: 12 }]}>
+                            {t('Réservation en cours')}
+                        </Text>
+                        <Text style={[styles.modalSub, { color: colors.textSecondary, textAlign: 'center', marginTop: 8, marginHorizontal: 20 }]}>
+                            {t('Vous avez déjà une réservation de pack active. Vous ne pouvez en créer une nouvelle que si votre demande de pack précédente a été refusée.')}
+                        </Text>
+
+                        <TouchableOpacity
+                            style={[styles.modalCta, { backgroundColor: colors.primary, marginTop: 24, width: '100%' }]}
+                            onPress={() => setActiveAlertModalVisible(false)}
+                        >
+                            <Text style={styles.modalCtaText}>
+                                {t('Compris')}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Validation Alert Modal */}
+            <Modal
+                visible={validationModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setValidationModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
+                        <TouchableOpacity
+                            style={styles.modalCloseBtn}
+                            onPress={() => setValidationModalVisible(false)}
+                        >
+                            <Ionicons name="close" size={22} color={colors.textSecondary} />
+                        </TouchableOpacity>
+
+                        <View style={styles.modalIconWrap}>
+                            <View style={[styles.modalIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+                                <Ionicons name="information-circle" size={28} color="#EF4444" />
+                            </View>
+                        </View>
+
+                        <Text style={[styles.modalTitle, { color: colors.text, textAlign: 'center', marginTop: 12 }]}>
+                            {t('Champs requis')}
+                        </Text>
+                        <Text style={[styles.modalSub, { color: colors.textSecondary, textAlign: 'center', marginTop: 8, marginHorizontal: 20 }]}>
+                            {t('Veuillez remplir votre nom complet, votre numéro de téléphone et votre âge pour continuer.')}
+                        </Text>
+
+                        <TouchableOpacity
+                            style={[styles.modalCta, { backgroundColor: colors.primary, marginTop: 24, width: '100%' }]}
+                            onPress={() => setValidationModalVisible(false)}
+                        >
+                            <Text style={styles.modalCtaText}>
+                                {t('D\'accord')}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -843,5 +1294,82 @@ const styles = StyleSheet.create({
         fontSize: 11,
         marginTop: 6,
         fontStyle: 'italic',
-    }
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'flex-end',
+    },
+    modalSheet: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 22,
+        paddingTop: 16,
+        paddingBottom: 34,
+    },
+    modalCloseBtn: {
+        alignSelf: 'flex-end',
+        padding: 6,
+    },
+    modalIconWrap: {
+        alignItems: 'center',
+        marginBottom: 14,
+    },
+    modalIconCircle: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '800',
+        textAlign: 'center',
+        marginBottom: 6,
+    },
+    modalSub: {
+        fontSize: 13,
+        textAlign: 'center',
+        marginBottom: 20,
+        lineHeight: 19,
+    },
+    modalFeatures: {
+        marginBottom: 20,
+    },
+    modalFeatureRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 14,
+    },
+    modalFeatureIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    modalFeatureText: {
+        flex: 1,
+    },
+    modalFeatureTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        marginBottom: 2,
+    },
+    modalFeatureDesc: {
+        fontSize: 11,
+        lineHeight: 16,
+    },
+    modalCta: {
+        paddingVertical: 16,
+        borderRadius: 16,
+        alignItems: 'center',
+    },
+    modalCtaText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '800',
+    },
 });

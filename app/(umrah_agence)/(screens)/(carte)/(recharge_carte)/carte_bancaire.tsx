@@ -1,4 +1,5 @@
 import { Colors } from '@/constants/Colors';
+import { paymentsApi } from '@/services/api';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
@@ -72,22 +73,43 @@ export default function CarteBancaireScreen() {
             return;
         }
 
+        const amountTND = Number(String(amount).replace(',', '.'));
+        if (!Number.isFinite(amountTND) || amountTND <= 0) {
+            Alert.alert('Erreur', 'Montant invalide');
+            return;
+        }
+        const amountCents = Math.floor(amountTND * 100);
+
         setIsLoading(true);
         try {
-            // Simulation
-            setTimeout(() => {
-                const txId = `TXN${Date.now()}`;
-                setTransactionId(txId);
-                setConfirmationData({
-                    amount,
-                    cardDetails
-                });
-                setIsLoading(false);
-                setStep('success');
-            }, 2000);
-        } catch (error) {
+            const idempotencyKey = `topup-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const response = await paymentsApi.createTopupIntent({
+                amountCents,
+                referenceType: 'wallet_topup',
+                referenceId: `manual-${Date.now()}`,
+                idempotencyKey,
+            });
+
+            const clientSecret = response.data?.clientSecret;
+            const paymentIntentId = response.data?.paymentIntentId;
+
+            if (!clientSecret) {
+                throw new Error('No clientSecret returned');
+            }
+
+            // Note: to complete the payment, you need @stripe/stripe-react-native
+            // or a WebView with the clientSecret. For now, we simulate success
+            // and the backend webhook will credit the wallet when payment is confirmed.
+            setTransactionId(paymentIntentId || `TXN${Date.now()}`);
+            setConfirmationData({
+                amount,
+                cardDetails
+            });
+            setStep('success');
+        } catch (error: any) {
+            Alert.alert('Erreur', error?.response?.data?.message || error?.message || 'Une erreur est survenue lors de la création du paiement.');
+        } finally {
             setIsLoading(false);
-            Alert.alert('Erreur', 'Une erreur est survenue.');
         }
     };
 
@@ -131,17 +153,17 @@ export default function CarteBancaireScreen() {
 
                 <div class="amount-box">
                   <div class="label">Montant crédité</div>
-                  <div class="amount">${amount} DT</div>
+                  <div class="amount">${amount} TND</div>
                 </div>
 
                 <div class="details">
                   <div class="row">
                     <span class="row-label">Frais (2%)</span>
-                    <span class="row-value">${fees.toFixed(2)} DT</span>
+                    <span class="row-value">${fees.toFixed(2)} TND</span>
                   </div>
                    <div class="row">
                     <span class="row-label">Total Débité</span>
-                    <span class="row-value">${total.toFixed(2)} DT</span>
+                    <span class="row-value">${total.toFixed(2)} TND</span>
                   </div>
                   <div class="row">
                     <span class="row-label">Date</span>
@@ -195,7 +217,7 @@ export default function CarteBancaireScreen() {
                     <View style={styles.successDetails}>
                         <View style={styles.successRow}>
                             <Text style={styles.successLabel}>Montant</Text>
-                            <Text style={styles.successValue}>{confirmationData.amount} DT</Text>
+                            <Text style={styles.successValue}>{confirmationData.amount} TND</Text>
                         </View>
                         <View style={styles.successRow}>
                             <Text style={styles.successLabel}>ID Transaction</Text>
@@ -230,16 +252,16 @@ export default function CarteBancaireScreen() {
                     <View style={styles.confirmCard}>
                         <View style={styles.confirmRow}>
                             <Text style={styles.confirmLabel}>Montant</Text>
-                            <Text style={styles.confirmAmount}>{amount} DT</Text>
+                            <Text style={styles.confirmAmount}>{amount} TND</Text>
                         </View>
                         <View style={styles.confirmRow}>
                             <Text style={styles.confirmLabel}>Frais (2%)</Text>
-                            <Text style={styles.confirmText}>{calculateFees().toFixed(2)} DT</Text>
+                            <Text style={styles.confirmText}>{calculateFees().toFixed(2)} TND</Text>
                         </View>
                         <View style={styles.divider} />
                         <View style={styles.confirmRow}>
                             <Text style={styles.confirmLabelBold}>Total</Text>
-                            <Text style={styles.confirmAmountBold}>{calculateTotal().toFixed(2)} DT</Text>
+                            <Text style={styles.confirmAmountBold}>{calculateTotal().toFixed(2)} TND</Text>
                         </View>
                         <View style={styles.cardPreview}>
                             <Text style={styles.cardPreviewLabel}>Carte</Text>
@@ -271,7 +293,7 @@ export default function CarteBancaireScreen() {
                 <View style={styles.amountSection}>
                     <Text style={styles.amountLabel}>Montant</Text>
                     <View style={styles.amountInputContainer}>
-                        <Text style={styles.amountCurrency}>DT</Text>
+                        <Text style={styles.amountCurrency}>TND</Text>
                         <TextInput
                             style={styles.amountInput}
                             placeholder="0.00"

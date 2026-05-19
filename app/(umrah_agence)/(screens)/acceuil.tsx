@@ -39,6 +39,7 @@ import PrayerTimerCard from '../../../components/spirituel/PrayerTimerCard';
 import { useThemeColors } from '../../../hooks/useThemeColors';
 import { AppDispatch, RootState } from '../../../store/store';
 import { fetchProfile } from '../../../store/authSlice';
+import { reviewsApi } from '@/services/api';
 
 
 // Sabeel Theme Colors - Consistent with Post Screen
@@ -226,7 +227,51 @@ export default function AcceuilScreen() {
         });
     };
 
-    const reviews = useSelector((state: RootState) => state.reviews.reviews);
+    const [realReviews, setRealReviews] = useState<any[]>([]);
+
+    const fetchRealReviews = async () => {
+        try {
+            const res = await reviewsApi.feed();
+            if (res.data && Array.isArray(res.data.reviews)) {
+                const mapped = res.data.reviews.map((r: any) => {
+                    const authorName = `${r.author?.firstName || ''} ${r.author?.lastName || ''}`.trim() || 'Pèlerin';
+                    let avatarSource = require('../../../assets/images/user1.jpg');
+                    if (r.author?.photo) {
+                        const photoUrl = r.author.photo.startsWith('http') 
+                            ? r.author.photo 
+                            : `http://192.168.1.14:3001${r.author.photo}`;
+                        avatarSource = { uri: photoUrl };
+                    }
+                    return {
+                        id: r.id,
+                        name: authorName,
+                        entityName: r.targetName || (r.targetType === 'AGENCE' ? 'Agence' : 'Guide'),
+                        type: r.targetType,
+                        rating: Number(r.rating || 5),
+                        comment: r.comment || '',
+                        image: avatarSource,
+                        date: r.createdAt ? new Date(r.createdAt).toLocaleDateString('fr-FR', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                        }) : 'Récemment',
+                        timestamp: r.createdAt ? new Date(r.createdAt).getTime() : Date.now(),
+                        userId: r.author?.id || r.authorUserId || '',
+                        comments: r.comments || []
+                    };
+                });
+                setRealReviews(mapped);
+            }
+        } catch (err) {
+            console.error('[Acceuil] Failed to fetch real reviews', err);
+        }
+    };
+
+    useFocusEffect(
+        React.useCallback(() => {
+            fetchRealReviews();
+        }, [])
+    );
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -415,10 +460,10 @@ export default function AcceuilScreen() {
                         </View>
 
                         <FlatList
-                            data={reviews}
+                            data={realReviews}
                             horizontal
                             showsHorizontalScrollIndicator={false}
-                            keyExtractor={(item) => item.id.toString()}
+                            keyExtractor={(item) => `${item.id}`}
                             contentContainerStyle={styles.reviewsList}
                             renderItem={({ item: review }) => (
                                 <View style={{ width: width - 40, marginRight: 15 }}>
@@ -426,6 +471,7 @@ export default function AcceuilScreen() {
                                     <Status
                                         review={review}
                                         onSharePress={handleShare}
+                                        currentUserId={user?.id}
                                         containerStyle={{
                                             marginHorizontal: 0,
                                             width: '100%',

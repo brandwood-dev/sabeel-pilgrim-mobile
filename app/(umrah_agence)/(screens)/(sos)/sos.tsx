@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Animated,
+    DeviceEventEmitter,
     Linking,
     Modal,
     SafeAreaView,
@@ -45,6 +46,7 @@ export default function SOSScreen() {
     const { t, language } = useTrans();
     const colors = useThemeColors();
     const isDarkMode = useSelector((state: RootState) => state.theme.isDarkMode);
+    const authUserId = useSelector((state: RootState) => String(state.auth.user?.id || '').trim());
     const isRTL = language === 'ar';
     const insets = useSafeAreaInsets();
 
@@ -62,8 +64,42 @@ export default function SOSScreen() {
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     const sosSocketRef = useRef<any>(null);
+    const didAutoOpenTrackingRef = useRef(false);
     const [contactsLoading, setContactsLoading] = useState(true);
     const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+
+    // If guide changes SOS status to "en cours", auto-open the tracking map for the pilgrim
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener('app:new_notification', (payload: any) => {
+            try {
+                const type = String(payload?.data?.type || payload?.type || '').toLowerCase();
+                if (type !== 'sos_status') return;
+                const status = String(payload?.data?.status || '').toLowerCase();
+
+                const targetPilgrimId = String(payload?.data?.pilgrimUserId || '').trim();
+                if (targetPilgrimId && authUserId && targetPilgrimId !== authUserId) return;
+
+                if (status === 'in_progress' || status === 'inprogress' || status === 'en_cours' || status === 'encours') {
+                    if (didAutoOpenTrackingRef.current) return;
+                    didAutoOpenTrackingRef.current = true;
+                    router.push('/(umrah_agence)/(screens)/(sos)/guide_tracking' as any);
+                }
+                if (status === 'resolved') {
+                    didAutoOpenTrackingRef.current = false;
+                }
+            } catch {
+                // ignore
+            }
+        });
+
+        return () => {
+            try {
+                sub.remove();
+            } catch {
+                // ignore
+            }
+        };
+    }, [router, authUserId]);
 
     useEffect(() => {
         let mounted = true;
@@ -506,9 +542,18 @@ export default function SOSScreen() {
                                 {t('Votre position a été partagée avec les services de secours et votre guide.')}
                             </Text>
 
+                            <TouchableOpacity
+                                style={[styles.sheetPrimaryBtn, { backgroundColor: '#FB923C' }]}
+                                onPress={() => {
+                                    setShowSuccessSheet(false);
+                                    router.push('/(umrah_agence)/(screens)/(sos)/guide_tracking' as any);
+                                }}
+                            >
+                                <Text style={styles.sheetPrimaryBtnText}>{t('Suivre le guide')}</Text>
+                            </TouchableOpacity>
+
                             <TouchableOpacity style={[styles.sheetPrimaryBtn, { backgroundColor: '#16A34A' }]} onPress={() => { setShowSuccessSheet(false); setAlertSent(false); }}>
-                                <Ionicons name="checkmark" size={20} color="#fff" />
-                                <Text style={styles.sheetPrimaryBtnText}>{t('OK')}</Text>
+                                <Text style={styles.sheetPrimaryBtnText}>{t('Terminer')}</Text>
                             </TouchableOpacity>
                         </TouchableOpacity>
                     </TouchableOpacity>

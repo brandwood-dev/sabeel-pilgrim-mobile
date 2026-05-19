@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const SERVER_BASE_URL = 'http://192.168.1.194:3001';
+export const SERVER_BASE_URL = 'http://192.168.1.100:3001';
 const API_BASE_URL = `${SERVER_BASE_URL}/sabeel`;
 
 const api = axios.create({
@@ -159,11 +159,28 @@ export const paymentsApi = {
     referenceId: string;
     idempotencyKey: string;
   }) => api.post('/payments/topup/create-intent', payload),
+  createDirectIntent: (payload: {
+    amountCents: number;
+    recipientType: 'GUIDE' | 'AGENCY';
+    recipientId: string;
+    referenceType: string;
+    referenceId: string;
+    idempotencyKey: string;
+  }) => api.post('/payments/direct/create-intent', payload),
+  walletPay: (payload: {
+    totalAmountCents: number;
+    recipientType: 'GUIDE' | 'AGENCY';
+    recipientId: string;
+    referenceType: string;
+    referenceId: string;
+    idempotencyKey: string;
+  }) => api.post('/payments/wallet-pay', payload),
 };
 
 export const messagingApi = {
   getMyConversations: () => api.get(`${SERVER_BASE_URL}/messaging/conversations`),
-  getConversationById: (conversationId: string) => api.get(`${SERVER_BASE_URL}/messaging/conversations/${conversationId}`),
+  getConversationById: (conversationId: string, params?: { limit?: number }) =>
+    api.get(`${SERVER_BASE_URL}/messaging/conversations/${conversationId}`, { params }),
   sendMessage: (conversationId: string, data: { content: string }) => api.post(`${SERVER_BASE_URL}/messaging/conversations/${conversationId}/messages`, data),
   getArchivedConversations: () => api.get(`${SERVER_BASE_URL}/messaging/conversations/archived`),
   archiveConversation: (conversationId: string) => api.post(`${SERVER_BASE_URL}/messaging/conversations/${conversationId}/archive`, {}),
@@ -185,6 +202,16 @@ export const trackingApi = {
   stopSharingMyPosition: () => api.post(`${SERVER_BASE_URL}/tracking/positions/stop`, {}),
   getPilgrimLastPosition: (pilgrimUserId: string) =>
     api.get(`${SERVER_BASE_URL}/tracking/pilgrim/${pilgrimUserId}/last-position`),
+  getMyGuideLastPosition: () =>
+    api.get(`${SERVER_BASE_URL}/tracking/pilgrim/me/guide-last-position`),
+  upsertMyGuidePosition: (data: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    speed?: number;
+    heading?: number;
+    deviceTimestamp?: string;
+  }) => api.post(`${SERVER_BASE_URL}/tracking/guide/positions`, data),
 };
 
 export const reviewsApi = {
@@ -192,6 +219,12 @@ export const reviewsApi = {
   getMyReviews: () => api.get('/reviews/mine'),
   getAllReviews: () => api.get('/reviews'),
   deleteReview: (id: string) => api.delete(`/reviews/${id}`),
+  feed: (params?: { targetType?: 'AGENCE' | 'GUIDE'; limit?: number; offset?: number }) =>
+    api.get('/reviews/feed', { params }),
+  listByTarget: (params: { targetType: 'AGENCE' | 'GUIDE'; targetId: string }) =>
+    api.get('/reviews/target', { params }),
+  summaryByTarget: (params: { targetType: 'AGENCE' | 'GUIDE'; targetId: string }) =>
+    api.get('/reviews/target/summary', { params }),
 };
 
 export const notificationsApi = {

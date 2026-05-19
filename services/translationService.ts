@@ -649,4 +649,93 @@ export const uiTranslations: Record<string, Record<SupportedLang, string>> = {
   },
   'Désactiver le partage': { fr: 'Désactiver le partage', en: 'Disable sharing', ar: 'تعطيل المشاركة' },
   'Activer le partage': { fr: 'Activer le partage', en: 'Enable sharing', ar: 'تفعيل المشاركة' },
+
+  // Reservation Pack (wallet payment)
+  'Confirmation de Réservation': { fr: 'Confirmation de Réservation', en: 'Reservation Confirmation', ar: 'تأكيد الحجز' },
+  'Réservation guidée': { fr: 'Réservation guidée', en: 'Guided Reservation', ar: 'حجز موجه' },
+  'Complétez les étapes ci-dessous pour envoyer un dossier clair à l\'agence et recevoir une réponse plus rapide.': {
+    fr: 'Complétez les étapes ci-dessous pour envoyer un dossier clair à l\'agence et recevoir une réponse plus rapide.',
+    en: 'Complete the steps below to send a clear file to the agency and receive a faster response.',
+    ar: 'أكمل الخطوات أدناه لإرسال ملف واضر إلى الوكالة والحصول على رد أسرع.',
+  },
+  'Veuillez remplir le nom, le téléphone et l\'âge.': {
+    fr: 'Veuillez remplir le nom, le téléphone et l\'âge.',
+    en: 'Please fill in the name, phone and age.',
+    ar: 'يرجى ملء الاسم والهاتف والعمر.',
+  },
+  'Solde insuffisant': { fr: 'Solde insuffisant', en: 'Insufficient balance', ar: 'رصيد غير كافٍ' },
+  'Votre solde wallet est insuffisant pour cet acompte. Veuillez recharger votre portefeuille.': {
+    fr: 'Votre solde wallet est insuffisant pour cet acompte. Veuillez recharger votre portefeuille.',
+    en: 'Your wallet balance is insufficient for this deposit. Please recharge your wallet.',
+    ar: 'رصيد محفظتك غير كافٍ لهذا الوديع. يرجى إعادة شحن محفظتك.',
+  },
+  'Recharger': { fr: 'Recharger', en: 'Recharge', ar: 'إعادة الشحن' },
+  'Actif': { fr: 'Actif', en: 'Active', ar: 'نشط' },
+  'Card liée': { fr: 'Card liée', en: 'Card linked', ar: 'البطاقة مربوطة' },
+  'Ajouter carte': { fr: 'Ajouter carte', en: 'Add card', ar: 'إضافة بطاقة' },
+  'Retirer': { fr: 'Retirer', en: 'Withdraw', ar: 'سحب' },
+  'Carte bancaire': { fr: 'Carte bancaire', en: 'Bank card', ar: 'البطاقة البنكية' },
+  'Votre carte est liée pour les recharges.': { fr: 'Votre carte est liée pour les recharges.', en: 'Your card is linked for top-ups.', ar: 'بطاقتك مربوطة لإعادة الشحن.' },
+  'Nouvelle recharge': { fr: 'Nouvelle recharge', en: 'New top-up', ar: 'شحن جديد' },
+  'Entrez le montant à retirer (TND). Traitement sous 48h max.': {
+    fr: 'Entrez le montant à retirer (TND). Traitement sous 48h max.',
+    en: 'Enter the amount to withdraw (TND). Processing within 48h max.',
+    ar: 'أدخل المبلغ المراد سحبه (د.ت). المعالجة في غضون 48 ساعة كحد أقصى.'
+  },
+  'Voulez-vous retirer': { fr: 'Voulez-vous retirer', en: 'Do you want to withdraw', ar: 'هل تريد سحب' },
+  "Le traitement peut prendre jusqu'à 48h.": { fr: "Le traitement peut prendre jusqu'à 48h.", en: 'Processing may take up to 48h.', ar: 'قد تستغرق المعالجة حتى 48 ساعة.' },
+  'Demande envoyée': { fr: 'Demande envoyée', en: 'Request sent', ar: 'تم إرسال الطلب' },
+  'Votre demande de retrait a été envoyée. Traitement sous 48h max.': {
+    fr: 'Votre demande de retrait a été envoyée. Traitement sous 48h max.',
+    en: 'Your withdrawal request has been sent. Processing within 48h max.',
+    ar: 'تم إرسال طلب السحب الخاص بك. المعالجة في غضون 48 ساعة كحد أقصى.'
+  },
+  'Impossible de demander le retrait.': { fr: 'Impossible de demander le retrait.', en: 'Unable to request withdrawal.', ar: 'تعذر طلب السحب.' },
+  'Impossible de charger le wallet.': { fr: 'Impossible de charger le wallet.', en: 'Unable to load wallet.', ar: 'تعذر تحميل المحفظة.' },
+  'Montant invalide': { fr: 'Montant invalide', en: 'Invalid amount', ar: 'مبلغ غير صالح' },
+  'Veuillez saisir un montant valide.': { fr: 'Veuillez saisir un montant valide.', en: 'Please enter a valid amount.', ar: 'يرجى إدخال مبلغ صالح.' },
+  'Réservation en cours': { fr: 'Réservation en cours', en: 'Reservation in progress', ar: 'حجز قيد التنفيذ' },
+  'Vous avez déjà une réservation active. Vous ne pouvez en créer une nouvelle que si votre demande précédente a été refusée.': {
+    fr: 'Vous avez déjà une réservation active. Vous ne pouvez en créer une nouvelle que si votre demande précédente a été refusée.',
+    en: 'You already have an active reservation. You can only create a new one if your previous request was rejected.',
+    ar: 'لديك حجز نشط بالفعل. لا يمكنك إنشاء حجز جديد إلا إذا تم رفض طلبك السابق.'
+  },
+  'Confirmation de paiement': { fr: 'Confirmation de paiement', en: 'Payment Confirmation', ar: 'تأكيد الدفع' },
+  'Votre paiement est sécurisé et traité en toute confidentialité.': {
+    fr: 'Votre paiement est sécurisé et traité en toute confidentialité.',
+    en: 'Your payment is secure and handled confidentially.',
+    ar: 'دفعتك آمنة وتتم معالجتها بسرية تامة.'
+  },
+  'Déduction wallet sécurisée': { fr: 'Déduction wallet sécurisée', en: 'Secure Wallet Deduction', ar: 'خصم آمن من المحفظة' },
+  'Le montant payable sera prélevé en toute sécurité depuis votre wallet.': {
+    fr: 'Le montant payable sera prélevé en toute sécurité depuis votre wallet.',
+    en: 'The payable amount will be safely deducted from your wallet.',
+    ar: 'سيتم خصم المبلغ المستحق بأمان من محفظتك.'
+  },
+  'Protection escrow': { fr: 'Protection escrow', en: 'Escrow Protection', ar: 'حماية الضمان' },
+  'Vos fonds sont conservés en sécurité et libérés uniquement après la livraison du service.': {
+    fr: 'Vos fonds sont conservés en sécurité et libérés uniquement après la livraison du service.',
+    en: 'Your funds are securely held and released only after service delivery.',
+    ar: 'يتم الاحتفاظ بأموالك بأمان وإصدارها فقط بعد تسليم الخدمة.'
+  },
+  'Garantie de remboursement': { fr: 'Garantie de remboursement', en: 'Refund Assurance', ar: 'ضمان استرداد الأموال' },
+  'En cas de problème, vous pouvez demander un remboursement complet selon notre politique.': {
+    fr: 'En cas de problème, vous pouvez demander un remboursement complet selon notre politique.',
+    en: 'If any issue occurs, you can request a full refund according to our policy.',
+    ar: 'في حال حدوث أي مشكلة، يمكنك طلب استرداد كامل وفقًا لسياستنا.'
+  },
+  'Traitement...': { fr: 'Traitement...', en: 'Processing...', ar: 'جاري المعالجة...' },
+  'Confirmer et réserver': { fr: 'Confirmer et réserver', en: 'Confirm & Book', ar: 'تأكيد وحجز' },
+  'Paiement refusé': { fr: 'Paiement refusé', en: 'Payment refused', ar: 'الدفع مرفوض' },
+  'Impossible de payer cet acompte depuis le wallet.': {
+    fr: 'Impossible de payer cet acompte depuis le wallet.',
+    en: 'Unable to pay this deposit from the wallet.',
+    ar: 'تعذر دفع هذا الوديع من المحفظة.',
+  },
+  'Réservation indisponible': { fr: 'Réservation indisponible', en: 'Reservation unavailable', ar: 'الحجز غير متاح' },
+  "Impossible d'envoyer la réservation pour le moment.": {
+    fr: "Impossible d'envoyer la réservation pour le moment.",
+    en: 'Unable to send the reservation at this time.',
+    ar: 'تعذر إرسال الحجز في الوقت الحالي.',
+  },
 };

@@ -1,5 +1,6 @@
 import { createMessagingSocket } from '@/services/messagingSocket';
 import { messagingApi } from '@/services/api';
+import { SERVER_BASE_URL } from '@/services/api';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { RootState } from '@/store/store';
 import { presentLocalMessageNotification } from '@/services/localNotifications';
@@ -12,6 +13,7 @@ import {
     ActivityIndicator,
     Alert,
     FlatList,
+    InteractionManager,
     Platform,
     ScrollView,
     SafeAreaView,
@@ -49,6 +51,7 @@ interface Conversation {
     avatar: string;
     lastMessage: string;
     timestamp: string;
+    sortTs: number;
     unreadCount: number;
     type: ConversationType;
 }
@@ -96,6 +99,17 @@ const formatConversationTimestamp = (value: unknown) => {
     }
 
     return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+};
+
+const getConversationSortTs = (conversation: any) => {
+    const raw =
+        conversation?.lastMessageAt ||
+        conversation?.lastMessage?.createdAt ||
+        conversation?.updatedAt ||
+        conversation?.createdAt ||
+        null;
+    const ms = raw ? Date.parse(String(raw)) : NaN;
+    return Number.isFinite(ms) ? ms : 0;
 };
 
 const getLastMessagePreview = (conversation: any) => {
@@ -179,9 +193,21 @@ const mapConversation = (conversation: any): Conversation => {
             conversation?.updatedAt ||
             conversation?.createdAt
         ),
+        sortTs: getConversationSortTs(conversation),
         unreadCount: Number(conversation?.unreadCount || 0),
         type: resolvedType,
     };
+};
+
+const dedupeConversationsById = (items: Conversation[]) => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+        const id = String(item?.id || '');
+        if (!id) return false;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
 };
 
 export default function ChatScreen() {
@@ -229,17 +255,7 @@ export default function ChatScreen() {
             if (cached) {
                 const parsed = JSON.parse(cached);
                 const list = Array.isArray(parsed) ? parsed : [];
-                const getSortTs = (c: any) => {
-                    const raw =
-                        c?.lastMessageAt ||
-                        c?.lastMessage?.createdAt ||
-                        c?.updatedAt ||
-                        c?.createdAt ||
-                        null;
-                    const ms = raw ? Date.parse(String(raw)) : NaN;
-                    return Number.isFinite(ms) ? ms : 0;
-                };
-                list.sort((a: any, b: any) => getSortTs(b) - getSortTs(a));
+                list.sort((a: any, b: any) => (Number(b?.sortTs) || 0) - (Number(a?.sortTs) || 0));
                 setConversations(list);
                 setLoading(false); // If we have cache, we might want to still refresh but show content
             }
@@ -273,28 +289,27 @@ export default function ChatScreen() {
                     .map(mapConversation)
                     .filter((item: Conversation) => Boolean(item.id));
 
-                const getSortTs = (c: any) => {
-                    const raw =
-                        c?.lastMessageAt ||
-                        c?.lastMessage?.createdAt ||
-                        c?.updatedAt ||
-                        c?.createdAt ||
-                        null;
-                    const ms = raw ? Date.parse(String(raw)) : NaN;
-                    return Number.isFinite(ms) ? ms : 0;
-                };
+                nextConversations.sort((a: any, b: any) => (Number(b?.sortTs) || 0) - (Number(a?.sortTs) || 0));
 
-                nextConversations.sort((a: any, b: any) => getSortTs(b) - getSortTs(a));
+                const uniqueConversations = dedupeConversationsById(nextConversations);
 
-                setConversations(nextConversations);
-                saveToCache(nextConversations);
-                syncGlobalUnread(nextConversations);
+                setConversations(uniqueConversations);
+                saveToCache(uniqueConversations);
+                syncGlobalUnread(uniqueConversations);
             } catch (error: any) {
                 if (!isMounted) {
                     return;
                 }
 
-                console.error('[ChatAccueil] failed to load conversations', error);
+                console.error('[ChatAccueil] failed to load conversations', {
+                    message: error?.message,
+                    code: error?.code,
+                    baseUrl: SERVER_BASE_URL,
+                    url: error?.config?.url,
+                    method: error?.config?.method,
+                    status: error?.response?.status,
+                    data: error?.response?.data,
+                });
                 Alert.alert(
                     'Messagerie indisponible',
                     error?.response?.data?.message || error?.message || 'Impossible de charger les conversations.'
@@ -321,24 +336,23 @@ export default function ChatScreen() {
                             .map(mapConversation)
                             .filter((item: Conversation) => Boolean(item.id));
 
-                        const getSortTs = (c: any) => {
-                            const raw =
-                                c?.lastMessageAt ||
-                                c?.lastMessage?.createdAt ||
-                                c?.updatedAt ||
-                                c?.createdAt ||
-                                null;
-                            const ms = raw ? Date.parse(String(raw)) : NaN;
-                            return Number.isFinite(ms) ? ms : 0;
-                        };
+                        nextConversations.sort((a: any, b: any) => (Number(b?.sortTs) || 0) - (Number(a?.sortTs) || 0));
 
-                        nextConversations.sort((a: any, b: any) => getSortTs(b) - getSortTs(a));
+                        const uniqueConversations = dedupeConversationsById(nextConversations);
 
-                        setConversations(nextConversations);
-                        syncGlobalUnread(nextConversations);
-                        saveToCache(nextConversations);
+                        setConversations(uniqueConversations);
+                        syncGlobalUnread(uniqueConversations);
+                        saveToCache(uniqueConversations);
                     } catch (error) {
-                        console.error('[ChatAccueil] failed to refresh conversations', error);
+                        console.error('[ChatAccueil] failed to refresh conversations', {
+                            message: (error as any)?.message,
+                            code: (error as any)?.code,
+                            baseUrl: SERVER_BASE_URL,
+                            url: (error as any)?.config?.url,
+                            method: (error as any)?.config?.method,
+                            status: (error as any)?.response?.status,
+                            data: (error as any)?.response?.data,
+                        });
                     }
                 };
 
@@ -402,21 +416,14 @@ export default function ChatScreen() {
                     const nextConversations = extractConversationsPayload(response.data)
                         .map(mapConversation)
                         .filter((item: Conversation) => Boolean(item.id));
-                    const getSortTs = (c: any) => {
-                        const raw =
-                            c?.lastMessageAt ||
-                            c?.lastMessage?.createdAt ||
-                            c?.updatedAt ||
-                            c?.createdAt ||
-                            null;
-                        const ms = raw ? Date.parse(String(raw)) : NaN;
-                        return Number.isFinite(ms) ? ms : 0;
-                    };
-                    nextConversations.sort((a: any, b: any) => getSortTs(b) - getSortTs(a));
-                    setConversations(nextConversations);
-                    const total = nextConversations.reduce((acc: number, c: Conversation) => acc + (Number(c?.unreadCount) || 0), 0);
+
+                    nextConversations.sort((a: any, b: any) => (Number(b?.sortTs) || 0) - (Number(a?.sortTs) || 0));
+
+                    const uniqueConversations = dedupeConversationsById(nextConversations);
+                    setConversations(uniqueConversations);
+                    const total = uniqueConversations.reduce((acc: number, c: Conversation) => acc + (Number(c?.unreadCount) || 0), 0);
                     dispatch(setUnreadMessagesCount(total));
-                    saveToCache(nextConversations);
+                    saveToCache(uniqueConversations);
                 } catch (e) {
                     // noop
                 }
@@ -427,17 +434,6 @@ export default function ChatScreen() {
     );
 
     const filteredConversations = useMemo(() => {
-        const getSortTs = (c: any) => {
-            const raw =
-                c?.lastMessageAt ||
-                c?.lastMessage?.createdAt ||
-                c?.updatedAt ||
-                c?.createdAt ||
-                null;
-            const ms = raw ? Date.parse(String(raw)) : NaN;
-            return Number.isFinite(ms) ? ms : 0;
-        };
-
         return conversations
             .filter((conv) => {
                 const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -451,19 +447,12 @@ export default function ChatScreen() {
                     (activeTab === 'accompagnant' && conv.type === 'pelerin');
                 return matchesSearch && matchesFilter;
             })
-            .sort((a: any, b: any) => getSortTs(b) - getSortTs(a));
+            .sort((a: any, b: any) => (Number(b?.sortTs) || 0) - (Number(a?.sortTs) || 0));
     }, [conversations, searchQuery, activeTab]);
 
     const handleConversationPress = (conversationId: string) => {
         const conversation = conversations.find(conv => conv.id === conversationId);
         if (conversation) {
-            setUnreadMap((prev) => ({ ...prev, [conversationId]: 0 }));
-
-            const convUnread = (unreadMap[conversationId] || 0) + (conversation.unreadCount || 0);
-            if (convUnread > 0) {
-                dispatch(setUnreadMessagesCount(Math.max(0, (conversations.reduce((acc: number, c: Conversation) => acc + (Number(c?.unreadCount) || 0), 0)) - convUnread)));
-            }
-
             router.push({
                 pathname: '/(umrah_agence)/(screens)/(chat)/chat_pelerin' as any,
                 params: {
@@ -471,6 +460,19 @@ export default function ChatScreen() {
                     contactName: conversation.name,
                     contactImage: conversation.avatar || '',
                     type: conversation.type,
+                }
+            });
+
+            InteractionManager.runAfterInteractions(() => {
+                setUnreadMap((prev) => ({ ...prev, [conversationId]: 0 }));
+
+                const convUnread = (unreadMap[conversationId] || 0) + (conversation.unreadCount || 0);
+                if (convUnread > 0) {
+                    const total = conversations.reduce(
+                        (acc: number, c: Conversation) => acc + (Number(c?.unreadCount) || 0),
+                        0,
+                    );
+                    dispatch(setUnreadMessagesCount(Math.max(0, total - convUnread)));
                 }
             });
         }
@@ -664,10 +666,17 @@ export default function ChatScreen() {
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.listContainer}
                     renderItem={renderConversationSwipe}
+                    initialNumToRender={12}
+                    maxToRenderPerBatch={12}
+                    windowSize={7}
+                    removeClippedSubviews={Platform.OS === 'android'}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <Ionicons name="chatbubbles-outline" size={64} color={colors.divider} />
                             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>{t('Aucune conversation')}</Text>
+                            <Text style={[styles.emptySubtext, { color: textSecondaryColor }]}>
+                                {t('Vos conversations apparaîtront ici')}
+                            </Text>
                         </View>
                     }
                 />
@@ -920,6 +929,7 @@ const styles = StyleSheet.create({
     },
     emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
     emptyText: { fontSize: 18, fontWeight: '600', marginTop: 16 },
+    emptySubtext: { fontSize: 14, marginTop: 8, textAlign: 'center' },
     assistantFab: {
         position: 'absolute',
         bottom: 120,

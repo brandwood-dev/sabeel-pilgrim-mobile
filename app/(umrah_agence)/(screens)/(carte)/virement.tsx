@@ -58,7 +58,7 @@ export default function VirementScreen() {
 
     const validateAmount = () => {
         const num = parseFloat(amount);
-        return !isNaN(num) && num > 0 && num <= 10000; // Limite max 10000 DT
+        return !isNaN(num) && num > 0 && num <= 10000; // Limite max 10000 TND
     };
 
     const handleSelectRecipient = (rec: Recipient) => {
@@ -77,7 +77,7 @@ export default function VirementScreen() {
             return;
         }
         if (!validateAmount()) {
-            Alert.alert('Erreur', 'Montant invalide (max 10 000 DT)');
+            Alert.alert('Erreur', 'Montant invalide (max 10 000 TND)');
             return;
         }
         setStep(2);
@@ -196,7 +196,7 @@ export default function VirementScreen() {
 
                 <div class="amount-box">
                   <div class="label">Montant envoyé</div>
-                  <div class="amount">${amount} DT</div>
+                  <div class="amount">${amount} TND</div>
                 </div>
 
                 <div class="details">
@@ -263,7 +263,7 @@ export default function VirementScreen() {
                     {/* Solde */}
                     <View style={[styles.balanceCard, { backgroundColor: colors.surface }]}>
                         <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>Solde disponible</Text>
-                        <Text style={[styles.balanceAmount, { color: colors.primary }]}>847.50 DT</Text>
+                        <Text style={[styles.balanceAmount, { color: colors.primary }]}>847.50 TND</Text>
                     </View>
 
                     {/* Destinataires récents */}
@@ -361,7 +361,7 @@ export default function VirementScreen() {
                                 )}
                             </View>
                             {amount && !validateAmount() && (
-                                <Text style={styles.errorText}>Montant invalide (max 10 000 DT)</Text>
+                                <Text style={styles.errorText}>Montant invalide (max 10 000 TND)</Text>
                             )}
                         </View>
 
@@ -422,7 +422,7 @@ export default function VirementScreen() {
                                 <Ionicons name="wallet-outline" size={18} color={colors.primary} />
                                 <View>
                                     <Text style={[styles.confirmValueText, { color: colors.text }]}>Mon portefeuille</Text>
-                                    <Text style={[styles.confirmValueSubtext, { color: colors.textSecondary }]}>847.50 DT disponible</Text>
+                                    <Text style={[styles.confirmValueSubtext, { color: colors.textSecondary }]}>847.50 TND disponible</Text>
                                 </View>
                             </View>
                         </View>
@@ -452,7 +452,7 @@ export default function VirementScreen() {
 
                         <View style={styles.confirmRow}>
                             <Text style={[styles.confirmLabel, { color: colors.textSecondary }]}>Montant</Text>
-                            <Text style={[styles.confirmAmount, { color: colors.primary }]}>{amount} DT</Text>
+                            <Text style={[styles.confirmAmount, { color: colors.primary }]}>{amount} TND</Text>
                         </View>
 
                         {reason ? (
@@ -471,7 +471,7 @@ export default function VirementScreen() {
 
                         <View style={styles.confirmRow}>
                             <Text style={[styles.confirmLabelBold, { color: colors.text }]}>Total à envoyer</Text>
-                            <Text style={[styles.confirmAmountBold, { color: colors.primary }]}>{amount} DT</Text>
+                            <Text style={[styles.confirmAmountBold, { color: colors.primary }]}>{amount} TND</Text>
                         </View>
                     </View>
 
@@ -479,7 +479,7 @@ export default function VirementScreen() {
                     <View style={[styles.termsBox, { backgroundColor: isDarkMode ? '#2c2c2c' : '#f9fafb' }]}>
                         <Ionicons name="information-circle-outline" size={18} color={colors.textSecondary} />
                         <Text style={[styles.termsText, { color: colors.textSecondary }]}>
-                            En confirmant, vous acceptez de transférer {amount} DT vers le bénéficiaire indiqué.
+                            En confirmant, vous acceptez de transférer {amount} TND vers le bénéficiaire indiqué.
                             Cette action ne peut pas être annulée.
                         </Text>
                     </View>
@@ -533,7 +533,7 @@ export default function VirementScreen() {
 
                                     <Text style={[styles.modalTitle, { color: colors.text }]}>Validation requise</Text>
                                     <Text style={[styles.modalDesc, { color: colors.textSecondary }]}>
-                                        Veuillez confirmer votre identité pour valider ce virement de {amount} DT
+                                        Veuillez confirmer votre identité pour valider ce virement de {amount} TND
                                     </Text>
 
                                     <TouchableOpacity style={[styles.biometricBtn, { backgroundColor: colors.primary }]} onPress={handleBiometricAuth}>
@@ -619,7 +619,7 @@ export default function VirementScreen() {
 
                 <Text style={[styles.successTitle, { color: colors.text }]}>Virement réussi!</Text>
                 <Text style={[styles.successSubtitle, { color: colors.textSecondary }]}>
-                    Votre virement de {amount} DT a été envoyé avec succès
+                    Votre virement de {amount} TND a été envoyé avec succès
                 </Text>
 
                 <View style={[styles.successDetails, { backgroundColor: colors.surface }]}>
@@ -632,7 +632,7 @@ export default function VirementScreen() {
 
                     <View style={styles.successRow}>
                         <Text style={[styles.successLabel, { color: colors.textSecondary }]}>Montant</Text>
-                        <Text style={[styles.successValue, { color: colors.primary }]}>{amount} DT</Text>
+                        <Text style={[styles.successValue, { color: colors.primary }]}>{amount} TND</Text>
                     </View>
 
                     <View style={styles.successRow}>

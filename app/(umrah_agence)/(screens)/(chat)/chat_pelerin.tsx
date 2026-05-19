@@ -9,7 +9,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
     Alert,
     FlatList,
+    InteractionManager,
     KeyboardAvoidingView,
+    Platform,
     SafeAreaView,
     StatusBar,
     StyleSheet,
@@ -34,6 +36,7 @@ interface ChatMessage {
     id: string;
     text: string;
     timestamp: string;
+    sortTs: number;
     isSent: boolean;
     type: 'text' | 'reservation_request' | 'reservation_status' | 'system';
     reservation?: {
@@ -92,14 +95,43 @@ const getReservationStatus = (conversation: any, reservationMessage?: ChatMessag
     return conversation?.isLocked ? 'pending' : 'accepted';
 };
 
+const buildStableMessageId = (message: any) => {
+    const rawCreatedAt = message?.createdAt ? String(message.createdAt) : '';
+    const rawSender = message?.senderUserId ? String(message.senderUserId) : (message?.senderRole ? String(message.senderRole) : '');
+    const rawContent = message?.content ? String(message.content) : '';
+    const rawType = message?.messageType ? String(message.messageType) : '';
+    const key = `${rawCreatedAt}|${rawSender}|${rawType}|${rawContent}`;
+    return `msg:${key}`;
+};
+
+const getMessageSortTs = (message: any) => {
+    const raw = message?.createdAt || message?.sentAt || message?.updatedAt || null;
+    const ms = raw ? Date.parse(String(raw)) : NaN;
+    return Number.isFinite(ms) ? ms : 0;
+};
+
+const dedupeMessagesById = (items: ChatMessage[]) => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+        const id = String(item?.id || '');
+        if (!id) return false;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+    });
+};
+
 const mapBackendMessage = (message: any, currentUserId?: string): ChatMessage => {
     // Use a persistent ID if available, otherwise fallback to temporary ID or timestamp
-    const id = message?.id ? String(message.id) : (message?._id ? String(message._id) : `msg-${Date.now()}-${Math.random()}`);
+    const id = message?.id
+        ? String(message.id)
+        : (message?._id ? String(message._id) : buildStableMessageId(message));
     
     return {
         id,
         text: String(message?.content || ''),
         timestamp: formatTime(message?.createdAt),
+        sortTs: getMessageSortTs(message),
         isSent: Boolean(currentUserId) ? message?.senderUserId === currentUserId : message?.senderRole !== 'agence',
         type: message?.messageType || 'text',
         reservation: message?.metadata?.reservation || null,
@@ -177,17 +209,20 @@ export default function ChatPelerinScreen() {
         const syncConversation = async (isInitial = false) => {
             try {
                 if (isInitial && !initialLoadDone) {
-                    loadFromCache();
+                    await loadFromCache();
                 }
-                const response = await messagingApi.getConversationById(conversationId);
+                const response = await messagingApi.getConversationById(conversationId, { limit: 60 });
                 if (!isMounted) return;
 
                 const newConversation = response.data?.conversation || null;
-                const newMessages = (response.data?.messages || []).map((item: any) => mapBackendMessage(item, currentUserId));
+                const newMessages = (response.data?.messages || [])
+                    .map((item: any) => mapBackendMessage(item, currentUserId))
+                    .sort((a: ChatMessage, b: ChatMessage) => (Number(a?.sortTs) || 0) - (Number(b?.sortTs) || 0));
+                const uniqueMessages = dedupeMessagesById(newMessages);
                 
                 setConversation(newConversation);
-                setMessages(newMessages);
-                saveToCache(newConversation, newMessages);
+                setMessages(uniqueMessages);
+                saveToCache(newConversation, uniqueMessages);
             } catch (error) {
                 console.error('[ChatPelerin] sync failed', error);
             } finally {
@@ -208,7 +243,12 @@ export default function ChatPelerinScreen() {
                     if (String(payload.conversation.id) !== String(conversationId)) return;
                     const nextMessage = mapBackendMessage(payload.message, currentUserId);
                     setConversation(payload.conversation || null);
-                    setMessages((prev) => prev.some((item) => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+                    setMessages((prev) => {
+                        const merged = prev.some((item) => item.id === nextMessage.id) ? prev : [...prev, nextMessage];
+                        const unique = dedupeMessagesById(merged);
+                        unique.sort((a, b) => (Number(a?.sortTs) || 0) - (Number(b?.sortTs) || 0));
+                        return unique;
+                    });
                 });
 
                 socketRef.on('reservation_updated', (payload: any) => {
@@ -216,7 +256,12 @@ export default function ChatPelerinScreen() {
                     setConversation((prev: any) => ({ ...prev, ...(payload.conversation || {}) }));
                     if (payload?.message) {
                         const nextMessage = mapBackendMessage(payload.message, currentUserId);
-                        setMessages((prev) => prev.some((item) => item.id === nextMessage.id) ? prev : [...prev, nextMessage]);
+                        setMessages((prev) => {
+                            const merged = prev.some((item) => item.id === nextMessage.id) ? prev : [...prev, nextMessage];
+                            const unique = dedupeMessagesById(merged);
+                            unique.sort((a, b) => (Number(a?.sortTs) || 0) - (Number(b?.sortTs) || 0));
+                            return unique;
+                        });
                     }
                 });
             } catch (error) {
@@ -224,8 +269,12 @@ export default function ChatPelerinScreen() {
             }
         };
 
-        syncConversation(true);
-        setupSocket();
+        // Defer network fetch + socket setup until after navigation/animations to keep the UI responsive.
+        InteractionManager.runAfterInteractions(() => {
+            if (!isMounted) return;
+            syncConversation(true);
+            setupSocket();
+        });
 
         return () => {
             isMounted = false;
@@ -234,7 +283,7 @@ export default function ChatPelerinScreen() {
     }, [conversationId, currentUserId]);
 
     const reservationMessage = useMemo(
-        () => [...messages].reverse().find((item) => item.type === 'reservation_request' && item.reservation),
+        () => [...messages].reverse().find((item) => item.reservation),
         [messages]
     );
 
@@ -273,25 +322,34 @@ export default function ChatPelerinScreen() {
         setInputText('');
 
         // Optimistic update
-        const temporaryId = `temp-${Date.now()}`;
+        const temporaryId = `temp-${String(conversationId)}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const optimisticMessage: ChatMessage = {
             id: temporaryId,
             text: messageText,
             timestamp: formatTime(new Date()),
+            sortTs: Date.now(),
             isSent: true,
             type: 'text',
         };
 
-        setMessages((prev) => [...prev, optimisticMessage]);
+        setMessages((prev) => {
+            const merged = [...prev, optimisticMessage];
+            const unique = dedupeMessagesById(merged);
+            unique.sort((a, b) => (Number(a?.sortTs) || 0) - (Number(b?.sortTs) || 0));
+            return unique;
+        });
 
         try {
             const response = await messagingApi.sendMessage(conversationId, { content: messageText });
             const nextMessage = mapBackendMessage(response.data?.message, currentUserId);
             
             // Replace optimistic message with real one
-            setMessages((prev) => 
-                prev.map((msg) => msg.id === temporaryId ? nextMessage : msg)
-            );
+            setMessages((prev) => {
+                const merged = prev.map((msg) => msg.id === temporaryId ? nextMessage : msg);
+                const unique = dedupeMessagesById(merged);
+                unique.sort((a, b) => (Number(a?.sortTs) || 0) - (Number(b?.sortTs) || 0));
+                return unique;
+            });
             
             setConversation(response.data?.conversation || null);
         } catch (error: any) {
@@ -326,6 +384,7 @@ export default function ChatPelerinScreen() {
                         <Text style={[styles.reservationLine, { color: textColor }]}>Pack : {item.reservation.packageName || 'Pack Umrah'}</Text>
                         <Text style={[styles.reservationLine, { color: textColor }]}>Date : {item.reservation.reservationDate || '-'}</Text>
                         <Text style={[styles.reservationLine, { color: textColor }]}>Pèlerins : {item.reservation.pilgrimCount || 1}</Text>
+                        {item.reservation.days ? <Text style={[styles.reservationLine, { color: textColor }]}>Nombre de jours : {item.reservation.days}</Text> : null}
                         {item.reservation.pilgrimName ? <Text style={[styles.reservationLine, { color: textColor }]}>Client : {item.reservation.pilgrimName}</Text> : null}
                         {item.reservation.pilgrimPhone ? <Text style={[styles.reservationLine, { color: textColor }]}>Téléphone : {item.reservation.pilgrimPhone}</Text> : null}
                         {item.reservation.pilgrimEmail ? <Text style={[styles.reservationLine, { color: textColor }]}>Email : {item.reservation.pilgrimEmail}</Text> : null}
@@ -432,6 +491,10 @@ export default function ChatPelerinScreen() {
                 data={messages}
                 renderItem={renderMessage}
                 keyExtractor={(item) => item.id}
+                initialNumToRender={16}
+                maxToRenderPerBatch={16}
+                windowSize={7}
+                removeClippedSubviews={Platform.OS === 'android'}
                 contentContainerStyle={styles.messagesList}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>

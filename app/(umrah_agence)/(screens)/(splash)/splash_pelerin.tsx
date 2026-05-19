@@ -1,11 +1,18 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, Animated, Dimensions, StatusBar } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+    StyleSheet,
+    View,
+    Text,
+    Animated,
+    Dimensions,
+    StatusBar,
+    Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store/store';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
@@ -14,77 +21,106 @@ export default function SplashPelerin() {
     const colors = useThemeColors();
     const isDarkMode = useSelector((state: RootState) => state.theme.isDarkMode);
 
+    // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
-    const scaleAnim = useRef(new Animated.Value(0.9)).current;
-    const textAnim = useRef(new Animated.Value(20)).current;
-
-    const PRIMARY = '#B8860B'; // Gold/Traditional for Pilgrim space
-    const SECONDARY = '#2C5F2D'; // Green
+    const scaleAnim = useRef(new Animated.Value(0.8)).current;
+    const rotateAnim = useRef(new Animated.Value(0)).current;
+    const progressAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        // Run animations
+        // Start animations
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
-                duration: 1200,
+                duration: 800,
                 useNativeDriver: true,
             }),
             Animated.spring(scaleAnim, {
                 toValue: 1,
-                friction: 8,
-                tension: 40,
+                tension: 20,
+                friction: 7,
                 useNativeDriver: true,
             }),
-            Animated.timing(textAnim, {
-                toValue: 0,
-                duration: 800,
-                delay: 200,
-                useNativeDriver: true,
+            Animated.loop(
+                Animated.timing(rotateAnim, {
+                    toValue: 1,
+                    duration: 3000,
+                    useNativeDriver: true,
+                })
+            ),
+            Animated.timing(progressAnim, {
+                toValue: 1,
+                duration: 2500,
+                useNativeDriver: false,
             })
         ]).start();
 
-        // Navigate back to Pilgrim home after 3 seconds
+        // Handle the switch after a delay
         const timer = setTimeout(() => {
             router.replace('/(umrah_agence)/(screens)/acceuil');
-        }, 3200);
+        }, 2800);
 
         return () => clearTimeout(timer);
     }, []);
 
-    return (
-        <View style={styles.container}>
-            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-            <LinearGradient
-                colors={isDarkMode ? ['#000000', '#1a1a1a'] : [PRIMARY, SECONDARY]}
-                style={styles.gradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            />
+    const rotation = rotateAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+    });
 
-            <Animated.View style={[
-                styles.content,
-                {
-                    opacity: fadeAnim,
-                    transform: [{ scale: scaleAnim }]
-                }
-            ]}>
-                <View style={styles.iconCircle}>
-                    <Ionicons name="moon" size={80} color="#fff" />
-                    <View style={styles.badge}>
-                        <Ionicons name="checkmark-circle" size={24} color={PRIMARY} />
+    const PRIMARY = '#1E3A1E'; // Sleek Traditional Emerald/Green background
+
+    return (
+        <View style={[styles.container, { backgroundColor: isDarkMode ? '#111111' : PRIMARY }]}>
+            <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+            <Animated.View
+                style={[
+                    styles.content,
+                    {
+                        opacity: fadeAnim,
+                        transform: [{ scale: scaleAnim }]
+                    }
+                ]}
+            >
+                <View style={styles.iconContainer}>
+                    <Animated.View style={{ transform: [{ rotate: rotation }] }}>
+                        <View style={styles.outerCircle} />
+                    </Animated.View>
+
+                    <View style={styles.innerIcon}>
+                        <MaterialCommunityIcons name="mosque" size={60} color="#fff" />
                     </View>
                 </View>
 
-                <Animated.View style={{ transform: [{ translateY: textAnim }] }}>
-                    <Text style={styles.title}>Sabeel</Text>
-                    <Text style={styles.subtitle}>Espace Pèlerin</Text>
-                    <View style={styles.divider} />
-                    <Text style={styles.loadingText}>Retour à votre voyage spirituel...</Text>
-                </Animated.View>
-            </Animated.View>
+                <View style={styles.textContainer}>
+                    <Text style={styles.title}>
+                        Sabeel
+                    </Text>
+                    <Text style={styles.subtitle}>
+                        Transition vers l'Espace Pèlerin
+                    </Text>
+                    <Text style={styles.description}>
+                        Retour à votre voyage spirituel...
+                    </Text>
+                </View>
 
-            <View style={styles.bottomInfo}>
-                <Text style={styles.footerText}>Sabeel © 2026 • Votre compagnon de voyage</Text>
+                <View style={styles.loaderContainer}>
+                    <Animated.View
+                        style={[
+                            styles.loadingBar,
+                            {
+                                width: progressAnim.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: ['0%', '100%'],
+                                })
+                            }
+                        ]}
+                    />
+                </View>
+            </Animated.View>
+            
+            <View style={styles.footerContainer}>
+                <Text style={styles.footerText}>Sabeel © 2026 • Votre compagnon spirituel</Text>
             </View>
         </View>
     );
@@ -95,83 +131,89 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#000',
-    },
-    gradient: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
     },
     content: {
         alignItems: 'center',
+        justifyContent: 'center',
     },
-    iconCircle: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        backgroundColor: 'rgba(255,255,255,0.15)',
+    iconContainer: {
+        width: 180,
+        height: 180,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 30,
+        marginBottom: 40,
+    },
+    outerCircle: {
+        width: 180,
+        height: 180,
+        borderRadius: 90,
         borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.3)',
+        borderColor: 'rgba(255,255,255,0.2)',
+        borderStyle: 'dashed',
     },
-    badge: {
+    innerIcon: {
         position: 'absolute',
-        bottom: 5,
-        right: 5,
-        backgroundColor: '#fff',
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        shadowColor: '#000',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
-        shadowRadius: 5,
-        elevation: 6,
+        shadowRadius: 10,
+        elevation: 8,
+    },
+    textContainer: {
+        alignItems: 'center',
     },
     title: {
-        fontSize: 34,
-        fontWeight: '800',
+        fontSize: 32,
+        fontWeight: '900',
         color: '#fff',
         textAlign: 'center',
-        letterSpacing: 2,
+        letterSpacing: 4,
+        textTransform: 'uppercase',
     },
     subtitle: {
-        fontSize: 18,
-        fontWeight: '500',
-        color: 'rgba(255,255,255,0.85)',
+        fontSize: 16,
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.9)',
         textAlign: 'center',
-        marginTop: 5,
-        textTransform: 'uppercase',
-        letterSpacing: 4,
+        marginTop: 8,
+        letterSpacing: 1.5,
     },
-    divider: {
-        width: 40,
-        height: 3,
-        backgroundColor: 'rgba(255,255,255,0.5)',
-        borderRadius: 2,
-        alignSelf: 'center',
-        marginVertical: 20,
-    },
-    loadingText: {
-        fontSize: 14,
+    description: {
+        fontSize: 13,
         color: 'rgba(255,255,255,0.6)',
         textAlign: 'center',
+        marginTop: 6,
         fontStyle: 'italic',
     },
-    bottomInfo: {
+    loaderContainer: {
+        width: width * 0.6,
+        height: 3,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        borderRadius: 2,
+        marginTop: 50,
+        overflow: 'hidden',
+    },
+    loadingBar: {
+        height: '100%',
+        backgroundColor: '#D4AF37', // Beautiful golden accent color
+        borderRadius: 2,
+    },
+    footerContainer: {
         position: 'absolute',
         bottom: 40,
         width: '100%',
         alignItems: 'center',
     },
     footerText: {
-        fontSize: 12,
+        fontSize: 11,
         color: 'rgba(255,255,255,0.4)',
         letterSpacing: 1,
     }

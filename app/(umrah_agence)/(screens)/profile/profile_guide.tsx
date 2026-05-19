@@ -1,4 +1,3 @@
-import BookingModal from '@/components/booking/BookingModal';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { guideApi, reservationApi, reviewsApi } from '@/services/api';
 import { RootState } from '@/store/store';
@@ -274,7 +273,17 @@ export default function GuideProfileScreen() {
 
                         <TouchableOpacity
                             style={[styles.contactCard, styles.reserveCard]}
-                            onPress={() => setShowBookingModal(true)}
+                            onPress={() => {
+                                router.push({
+                                    pathname: '/(umrah_agence)/(screens)/profile/reservation_guide' as any,
+                                    params: {
+                                        guideId,
+                                        guideName,
+                                        guidePrice,
+                                        guidePhoto,
+                                    }
+                                });
+                            }}
                             disabled={bookingStatus === 'pending'}
                         >
                             <Ionicons name="calendar-outline" size={20} color="#fff" />
@@ -425,18 +434,7 @@ export default function GuideProfileScreen() {
                 </View>
             </Modal>
 
-            {/* Booking Modal */}
-            <BookingModal
-                visible={showBookingModal}
-                onClose={() => setShowBookingModal(false)}
-                onSubmit={handleBookingSubmit}
-                title="Réserver une Omra"
-                dateLabel="Choisir une date"
-                peopleLabel="Nombre de personnes"
-                submitLabel="Envoyer la demande"
-                note="Le guide recevra votre demande et pourra l'accepter ou la refuser. Vous serez notifié de sa réponse."
-                availableDates={availableDates}
-            />
+
 
             <Modal
                 visible={addReviewVisible}

@@ -20,7 +20,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 
 import { useSelector } from 'react-redux';
 import { useThemeColors } from '../../../../hooks/useThemeColors';
-import { agencyApi, guideApi, reviewsApi } from '@/services/api';
+import { agencyApi, guideApi, reviewsApi, authApi } from '@/services/api';
 import { RootState } from '../../../../store/store';
 
 // Sabeel Theme Colors - Removed Brown Tones
@@ -72,6 +72,22 @@ export default function PostScreen() {
         comment: '',
     });
     const [showEntitySelector, setShowEntitySelector] = useState(false);
+    const [userProfile, setUserProfile] = useState<any>(null);
+
+    const fetchUserProfile = async () => {
+        try {
+            const res = await authApi.getProfile();
+            if (res.data) {
+                setUserProfile(res.data);
+            }
+        } catch (err) {
+            console.error('[PostScreen] Failed to fetch user profile', err);
+        }
+    };
+
+    useEffect(() => {
+        fetchUserProfile();
+    }, []);
 
     const fetchFeed = async () => {
         try {
@@ -167,7 +183,11 @@ export default function PostScreen() {
             <View style={styles.reviewHeaderRow}>
                 <View style={styles.reviewHeaderLeft}>
                     <Image
-                        source={require('../../../../assets/images/user1.jpg')}
+                        source={
+                            review.author?.photo
+                                ? { uri: review.author.photo.startsWith('http') ? review.author.photo : `http://192.168.1.14:3001${review.author.photo}` }
+                                : require('../../../../assets/images/user1.jpg')
+                        }
                         style={[styles.reviewAvatar, { borderColor: dividerColor }]}
                     />
                     <View style={{ flex: 1 }}>
@@ -300,7 +320,11 @@ export default function PostScreen() {
                                 activeOpacity={0.7}
                             >
                                 <Image
-                                    source={require('../../../../assets/images/user1.jpg')}
+                                    source={
+                                        userProfile?.photo
+                                            ? { uri: userProfile.photo.startsWith('http') ? userProfile.photo : `http://192.168.1.14:3001${userProfile.photo}` }
+                                            : require('../../../../assets/images/user1.jpg')
+                                    }
                                     style={[styles.createPostAvatar, { borderColor: dividerColor }]}
                                 />
                                 <View style={[styles.createPostInput, { backgroundColor: inputBgColor, borderColor: dividerColor }]}>
